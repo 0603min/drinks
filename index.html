@@ -11,12 +11,25 @@
         import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase 配置 (由環境自動提供)
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // ==========================================
+        // 【已填入你的 Firebase 配置】
+        // ==========================================
+        const myFirebaseConfig = {
+            apiKey: "AIzaSyD859fl8yhO4iBDQYhBCcJlvKNakRprlDI",
+            authDomain: "drinks-e4cab.firebaseapp.com",
+            projectId: "drinks-e4cab",
+            storageBucket: "drinks-e4cab.firebasestorage.app",
+            messagingSenderId: "131339160240",
+            appId: "1:131339160240:web:25431ca8429984f5cec975"
+        };
+
+        // 自動判斷環境：如果在 Canvas 預覽則使用系統配置，如果在 GitHub 則使用上方配置
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
+        
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'drink-tracker-rose-sync';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'drinks-e4cab-project';
 
         // --- 自動同步房間邏輯 ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -38,7 +51,7 @@
             localStorage.setItem('magic_room_id', roomId);
         } catch(e) {}
 
-        // 安全地嘗試更新網址列，避免在 blob 或某些環境下拋出 SecurityError
+        // 安全地嘗試更新網址列
         try {
             if (!window.location.search.includes('room=')) {
                 const url = new URL(window.location.href);
@@ -51,17 +64,16 @@
 
         let currentUser = null;
         let drinksData = {};
-        let currentViewDate = new Date(2026, 0, 1);
+        let currentViewDate = new Date(2026, 0, 1); 
         let selectedDate = null;
         let unsubscribe = null;
 
-        const ICE_LEVELS = ["正常", "少冰", "微冰", "去冰", "常溫", "溫"];
-        const SWEETNESS_LEVELS = ["全糖", "少糖", "半糖", "微糖", "一分糖", "無糖"];
+        const ICE_LEVELS = ["正常", "少冰", "微冰", "去冰", "溫"];
+        const SWEETNESS_LEVELS = ["全糖", "少糖", "半糖", "微糖", "一分糖", "無糖","無法調整"];
 
         const $ = (id) => document.getElementById(id);
 
         async function init() {
-            // 處理認證 (規則 3)
             const initAuth = async () => {
                 try {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -70,7 +82,7 @@
                         await signInAnonymously(auth);
                     }
                 } catch(err) {
-                    console.error("認證失敗", err);
+                    console.error("認證失敗，請檢查 Firebase Console 是否啟動匿名登入", err);
                 }
             };
             await initAuth();
@@ -93,10 +105,9 @@
             if (!currentUser) return;
             if (unsubscribe) unsubscribe();
 
-            // 使用公共路徑以利跨裝置同步 (規則 1)
+            // 確保路徑符合規範
             const drinksRef = collection(db, 'artifacts', appId, 'public', 'data', 'room_' + roomId);
             
-            // 即時監聽雲端資料 (規則 2: 簡單查詢)
             unsubscribe = onSnapshot(drinksRef, (snapshot) => {
                 drinksData = {};
                 snapshot.forEach(doc => {
@@ -105,7 +116,7 @@
                 renderCalendar();
                 updateStats();
             }, (error) => {
-                console.error("同步讀取失敗", error);
+                console.error("同步讀取失敗，請檢查 Firestore 規則是否設為測試模式", error);
             });
         }
 
@@ -157,9 +168,7 @@
             renderOptionButtons("iceContainer", ICE_LEVELS, data.ice);
             renderOptionButtons("sweetnessContainer", SWEETNESS_LEVELS, data.sweetness);
             
-            // 如果有資料才顯示刪除按鈕
             $("deleteBtn").classList.toggle("hidden", !drinksData[dateKey]);
-            
             $("drinkModal").classList.remove("hidden");
             $("drinkModal").classList.add("flex");
         }
@@ -200,7 +209,7 @@
                 closeModal();
                 showToast("🪄 紀錄已封印並同步！");
             } catch (e) {
-                showToast("同步失敗，請確認連線。");
+                showToast("同步失敗，請確認 Firebase 設定。");
             }
         }
 
@@ -225,7 +234,6 @@
             $("deleteBtn").onclick = deleteDrink;
             $("closeModal").onclick = closeModal;
             
-            // 複製分享連結
             $("copyLinkBtn").onclick = () => {
                 const url = new URL(window.location.href);
                 url.searchParams.set('room', roomId);
@@ -282,7 +290,6 @@
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; background-color: #fff5f7; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
         
-        /* 改寫為標準 CSS 語法以避免 VS Code 報錯 */
         .calendar-header-day { 
             text-align: center;
             padding-top: 0.75rem;
@@ -294,9 +301,7 @@
             background-color: rgba(255, 241, 242, 0.5); 
         }
         @media (min-width: 640px) {
-            .calendar-header-day {
-                font-size: 0.75rem; 
-            }
+            .calendar-header-day { font-size: 0.75rem; }
         }
 
         .sakura { position: fixed; top: -20px; width: 15px; height: 15px; background: #ffb7c5; border-radius: 100% 0 100% 0; opacity: 0.3; z-index: 1; pointer-events: none; animation: fall 12s linear infinite; }
