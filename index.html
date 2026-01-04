@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我超愛喝手搖 - 2026 玫瑰魔法紀錄</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 配置 (由環境自動提供)
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'drink-tracker-rose-sync';
+
+        // --- 自動同步房間邏輯 ---
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomId = urlParams.get('room');
+        
+        if (!roomId) {
+            try {
+                roomId = localStorage.getItem('magic_room_id');
+            } catch(e) {}
+            
+            if (!roomId) {
+                // 產生一組 6 位數隨機房間碼
+                roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            }
+        }
+        
+        // 確保儲存 ID
+        try {
+            localStorage.setItem('magic_room_id', roomId);
+        } catch(e) {}
+
+        // 安全地嘗試更新網址列，避免在 blob 或某些環境下拋出 SecurityError
+        try {
+            if (!window.location.search.includes('room=')) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('room', roomId);
+                window.history.replaceState({}, '', url);
+            }
+        } catch (e) {
+            console.warn("無法在當前環境自動更新網址，同步功能仍會運作。");
+        }
+
+        let currentUser = null;
+        let drinksData = {};
+        let currentViewDate = new Date(2026, 0, 1);
+        let selectedDate = null;
+        let unsubscribe = null;
+
+        const ICE_LEVELS = ["正常", "少冰", "微冰", "去冰", "常溫", "溫"];
+        const SWEETNESS_LEVELS = ["全糖", "少糖", "半糖", "微糖", "一分糖", "無糖"];
+
+        const $ = (id) => document.getElementById(id);
+
+        async function init() {
+            // 處理認證 (規則 3)
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch(err) {
+                    console.error("認證失敗", err);
+                }
+            };
+            await initAuth();
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    $("roomCode").innerText = roomId;
+                    setupDataListener();
+                }
+            });
+
+            renderCalendar();
+            setupEventListeners();
+            lucide.createIcons();
+            createSakura();
+        }
+
+        function setupDataListener() {
+            if (!currentUser) return;
+            if (unsubscribe) unsubscribe();
+
+            // 使用公共路徑以利跨裝置同步 (規則 1)
+            const drinksRef = collection(db, 'artifacts', appId, 'public', 'data', 'room_' + roomId);
+            
+            // 即時監聽雲端資料 (規則 2: 簡單查詢)
+            unsubscribe = onSnapshot(drinksRef, (snapshot) => {
+                drinksData = {};
+                snapshot.forEach(doc => {
+                    drinksData[doc.id] = doc.data();
+                });
+                renderCalendar();
+                updateStats();
+            }, (error) => {
+                console.error("同步讀取失敗", error);
+            });
+        }
+
+        function renderCalendar() {
+            const year = currentViewDate.getFullYear();
+            const month = currentViewDate.getMonth();
+            $("currentMonthYear").innerText = `${year}年 ${month + 1}月`;
+            
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const grid = $("calendarGrid");
+            grid.innerHTML = "";
+
+            for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div class="h-20 sm:h-32 border border-pink-50 bg-pink-50/10"></div>`;
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const drink = drinksData[dateKey];
+                const isToday = new Date().toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'}).replace(/\//g, '-') === dateKey;
+                
+                const dayEl = document.createElement("div");
+                dayEl.className = `h-20 sm:h-32 border border-pink-100 relative cursor-pointer hover:bg-rose-50 transition-all p-1 ${isToday ? 'bg-rose-50 ring-2 ring-pink-400 ring-inset' : 'bg-white'}`;
+                dayEl.onclick = () => openDrinkModal(dateKey);
+                
+                dayEl.innerHTML = `
+                    <span class="text-xs sm:text-sm font-bold ${isToday ? 'text-rose-600' : 'text-pink-400'}">${day}</span>
+                    <div class="mt-1 flex flex-col gap-0.5 overflow-hidden">
+                        ${drink ? `
+                            <div class="bg-gradient-to-r from-rose-400 to-pink-400 text-white text-[7px] sm:text-[10px] p-0.5 sm:p-1 rounded truncate shadow-sm">
+                                ${drink.shop}
+                            </div>
+                            ${drink.price ? `<div class="text-[7px] sm:text-[8px] text-rose-400 px-1 font-bold italic">$${drink.price}</div>` : ''}
+                        ` : ''}
+                    </div>
+                `;
+                grid.appendChild(dayEl);
+            }
+        }
+
+        function openDrinkModal(dateKey) {
+            selectedDate = dateKey;
+            const data = drinksData[dateKey] || { shop: '', item: '', price: '', ice: '正常', sweetness: '全糖', note: '' };
+            $("modalDateTitle").innerText = `${dateKey} 的魔法紀錄`;
+            $("inputShop").value = data.shop;
+            $("inputItem").value = data.item;
+            $("inputPrice").value = data.price || '';
+            $("inputNote").value = data.note || '';
+            
+            renderOptionButtons("iceContainer", ICE_LEVELS, data.ice);
+            renderOptionButtons("sweetnessContainer", SWEETNESS_LEVELS, data.sweetness);
+            
+            // 如果有資料才顯示刪除按鈕
+            $("deleteBtn").classList.toggle("hidden", !drinksData[dateKey]);
+            
+            $("drinkModal").classList.remove("hidden");
+            $("drinkModal").classList.add("flex");
+        }
+
+        function renderOptionButtons(containerId, options, selectedValue) {
+            const container = $(containerId);
+            container.innerHTML = "";
+            options.forEach(opt => {
+                const isSelected = selectedValue === opt;
+                const btn = document.createElement("button");
+                btn.innerText = opt;
+                btn.className = `px-2 py-3 rounded-xl text-[10px] sm:text-sm font-medium border transition-all ${isSelected ? 'bg-rose-500 text-white border-rose-500 shadow-md scale-105' : 'bg-white text-rose-400 border-pink-200'}`;
+                btn.onclick = () => {
+                    container.querySelectorAll('button').forEach(b => b.className = `px-2 py-3 rounded-xl text-[10px] sm:text-sm font-medium border bg-white text-rose-400 border-pink-200`);
+                    btn.className = `px-2 py-3 rounded-xl text-[10px] sm:text-sm font-medium border bg-rose-500 text-white border-rose-500 shadow-md scale-105`;
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        async function saveDrink() {
+            if (!currentUser || !selectedDate) return;
+            const shop = $("inputShop").value.trim();
+            const item = $("inputItem").value.trim();
+            const price = $("inputPrice").value;
+            if (!shop || !item) { showToast("請填寫店名與品項哦！"); return; }
+            
+            const ice = Array.from($("iceContainer").querySelectorAll('button')).find(b => b.classList.contains('bg-rose-500'))?.innerText;
+            const sweetness = Array.from($("sweetnessContainer").querySelectorAll('button')).find(b => b.classList.contains('bg-rose-500'))?.innerText;
+            
+            const drinkRef = doc(db, 'artifacts', appId, 'public', 'data', 'room_' + roomId, selectedDate);
+            try {
+                await setDoc(drinkRef, { 
+                    shop, item, price: price ? parseInt(price) : 0, ice, sweetness, 
+                    note: $("inputNote").value,
+                    updatedAt: new Date().toISOString()
+                });
+                closeModal();
+                showToast("🪄 紀錄已封印並同步！");
+            } catch (e) {
+                showToast("同步失敗，請確認連線。");
+            }
+        }
+
+        async function deleteDrink() {
+            if (!currentUser || !selectedDate) return;
+            const drinkRef = doc(db, 'artifacts', appId, 'public', 'data', 'room_' + roomId, selectedDate);
+            try {
+                await deleteDoc(drinkRef);
+                closeModal();
+                showToast("✨ 紀錄已抹除");
+            } catch (e) {
+                showToast("刪除失敗。");
+            }
+        }
+
+        function closeModal() { $("drinkModal").classList.add("hidden"); }
+        
+        function setupEventListeners() {
+            $("prevMonth").onclick = () => { currentViewDate.setMonth(currentViewDate.getMonth() - 1); renderCalendar(); };
+            $("nextMonth").onclick = () => { currentViewDate.setMonth(currentViewDate.getMonth() + 1); renderCalendar(); };
+            $("saveBtn").onclick = saveDrink;
+            $("deleteBtn").onclick = deleteDrink;
+            $("closeModal").onclick = closeModal;
+            
+            // 複製分享連結
+            $("copyLinkBtn").onclick = () => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('room', roomId);
+                const shareLink = url.toString();
+                
+                const tempInput = document.createElement("input");
+                document.body.appendChild(tempInput);
+                tempInput.value = shareLink;
+                tempInput.select();
+                try {
+                    document.execCommand("copy");
+                    showToast("📋 連結已複製！傳給手機開啟即可同步");
+                } catch(err) {
+                    showToast("複製失敗，請手動分享網址。");
+                }
+                document.body.removeChild(tempInput);
+            };
+        }
+
+        function updateStats() {
+            const entries = Object.values(drinksData);
+            $("statTotal").innerText = entries.length;
+            let totalSpent = 0;
+            const shops = {};
+            entries.forEach(d => {
+                if (d.price) totalSpent += d.price;
+                shops[d.shop] = (shops[d.shop] || 0) + 1;
+            });
+            $("statTotalSpent").innerText = `$${totalSpent}`;
+            const fav = Object.entries(shops).sort((a,b) => b[1] - a[1])[0];
+            $("statFavShop").innerText = fav ? fav[0] : "無資料";
+        }
+
+        function showToast(msg) {
+            const t = $("toast");
+            t.innerText = msg;
+            t.classList.remove("translate-y-20", "opacity-0");
+            setTimeout(() => t.classList.add("translate-y-20", "opacity-0"), 3000);
+        }
+
+        function createSakura() {
+            for (let i = 0; i < 6; i++) {
+                const s = document.createElement('div');
+                s.className = 'sakura';
+                s.style.left = Math.random() * 100 + 'vw';
+                s.style.animationDelay = Math.random() * 5 + 's';
+                document.body.appendChild(s);
+            }
+        }
+
+        window.onload = init;
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #fff5f7; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        
+        /* 改寫為標準 CSS 語法以避免 VS Code 報錯 */
+        .calendar-header-day { 
+            text-align: center;
+            padding-top: 0.75rem;
+            padding-bottom: 0.75rem;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fda4af; 
+            text-transform: uppercase;
+            background-color: rgba(255, 241, 242, 0.5); 
+        }
+        @media (min-width: 640px) {
+            .calendar-header-day {
+                font-size: 0.75rem; 
+            }
+        }
+
+        .sakura { position: fixed; top: -20px; width: 15px; height: 15px; background: #ffb7c5; border-radius: 100% 0 100% 0; opacity: 0.3; z-index: 1; pointer-events: none; animation: fall 12s linear infinite; }
+        @keyframes fall { 0% { transform: translateY(0) rotate(0deg); opacity: 0; } 10% { opacity: 0.6; } 100% { transform: translateY(110vh) rotate(360deg); opacity: 0; } }
+        .magic-card { transition: all 0.3s ease; }
+        .magic-card:hover { transform: translateY(-3px); border-color: #fda4af; }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 pb-24">
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-pink-100 sticky top-0 z-30 shadow-md">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="bg-gradient-to-br from-rose-400 to-pink-500 p-1.5 rounded-full text-white shadow-md"><i data-lucide="sparkles" class="w-4 h-4"></i></div>
+                <h1 class="text-lg sm:text-xl font-black bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent truncate">我超愛喝手搖</h1>
+            </div>
+            <div class="flex items-center gap-1 bg-pink-50 p-1 rounded-full border border-pink-100 scale-90 sm:scale-100">
+                <button id="prevMonth" class="p-2 text-rose-400"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                <span id="currentMonthYear" class="px-2 font-bold text-rose-700 min-w-[90px] text-center text-sm italic text-nowrap">2026年 1月</span>
+                <button id="nextMonth" class="p-2 text-rose-400"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 mt-6 relative z-10">
+        <!-- 統計數據 -->
+        <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
+            <div class="bg-white/90 p-3 sm:p-4 rounded-3xl border-2 border-pink-50 shadow-sm flex flex-col sm:flex-row items-center gap-2 sm:gap-4 magic-card text-center sm:text-left">
+                <div class="bg-rose-100 p-2 rounded-2xl text-rose-500"><i data-lucide="heart" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
+                <div><p class="text-[8px] text-rose-300 font-bold uppercase">杯數</p><p id="statTotal" class="text-sm sm:text-xl font-black text-rose-600">0</p></div>
+            </div>
+            <div class="bg-white/90 p-3 sm:p-4 rounded-3xl border-2 border-pink-50 shadow-sm flex flex-col sm:flex-row items-center gap-2 sm:gap-4 magic-card text-center sm:text-left">
+                <div class="bg-amber-100 p-2 rounded-2xl text-amber-500"><i data-lucide="banknote" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
+                <div><p class="text-[8px] text-amber-400 font-bold uppercase">總計</p><p id="statTotalSpent" class="text-sm sm:text-xl font-black text-rose-600">$0</p></div>
+            </div>
+            <div class="bg-white/90 p-3 sm:p-4 rounded-3xl border-2 border-pink-50 shadow-sm flex flex-col sm:flex-row items-center gap-2 sm:gap-4 magic-card text-center sm:text-left">
+                <div class="bg-pink-100 p-2 rounded-2xl text-pink-500"><i data-lucide="crown" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
+                <div class="overflow-hidden"><p class="text-[8px] text-pink-400 font-bold uppercase">愛店</p><p id="statFavShop" class="text-[10px] sm:text-base font-black text-rose-600 truncate w-full">無</p></div>
+            </div>
+        </div>
+
+        <!-- 日曆 -->
+        <div class="bg-white rounded-[2rem] border-2 sm:border-4 border-pink-50 shadow-2xl overflow-hidden backdrop-blur-sm">
+            <div class="grid grid-cols-7 border-b border-pink-50">
+                <div class="calendar-header-day">日</div><div class="calendar-header-day">一</div><div class="calendar-header-day">二</div><div class="calendar-header-day">三</div><div class="calendar-header-day">四</div><div class="calendar-header-day">五</div><div class="calendar-header-day" style="color: #fbbf24;">六</div>
+            </div>
+            <div id="calendarGrid" class="grid grid-cols-7"></div>
+        </div>
+
+        <!-- 同步資訊 -->
+        <div class="mt-8 p-6 bg-white/70 rounded-[2rem] border-2 border-dashed border-rose-200 text-center">
+            <p class="text-xs font-bold text-rose-400 mb-2 flex items-center justify-center gap-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i> 魔法同步狀態：運作中
+            </p>
+            <p class="text-[10px] text-rose-300 mb-4">您的專屬房間號：<span id="roomCode" class="font-mono bg-rose-50 px-2 py-1 rounded">---</span></p>
+            <button id="copyLinkBtn" class="bg-gradient-to-r from-rose-400 to-pink-500 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-lg hover:scale-105 transition-all flex items-center gap-2 mx-auto">
+                <i data-lucide="link" class="w-4 h-4"></i> 複製同步連結傳給手機
+            </button>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div id="drinkModal" class="fixed inset-0 bg-rose-900/20 backdrop-blur-md z-50 hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border-2 border-pink-100 animate-in fade-in zoom-in duration-300 overflow-hidden">
+            <div class="px-6 py-5 border-b border-pink-50 flex justify-between items-center bg-rose-50/30">
+                <div class="flex items-center gap-2 text-rose-800 font-black"><i data-lucide="wand-2" class="w-5 h-5"></i><h3 id="modalDateTitle">魔法紀錄</h3></div>
+                <button id="closeModal" class="p-1 hover:bg-white rounded-full transition-all"><i data-lucide="x" class="text-rose-300 w-6 h-6"></i></button>
+            </div>
+            <div class="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1"><label class="text-[10px] font-bold text-rose-300 px-1">店名</label><input id="inputShop" type="text" placeholder="店名" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 text-sm focus:outline-none"></div>
+                    <div class="space-y-1"><label class="text-[10px] font-bold text-rose-300 px-1">品項</label><input id="inputItem" type="text" placeholder="品項" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 text-sm focus:outline-none"></div>
+                </div>
+                <div class="space-y-1"><label class="text-[10px] font-bold text-rose-300 px-1">金額 (魔力值)</label><input id="inputPrice" type="number" placeholder="NT$" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 text-sm focus:outline-none"></div>
+                <div><p class="text-[10px] font-black text-rose-300 uppercase mb-2 text-center">冰量等級</p><div id="iceContainer" class="grid grid-cols-3 gap-2"></div></div>
+                <div><p class="text-[10px] font-black text-rose-300 uppercase mb-2 text-center">糖分魔法</p><div id="sweetnessContainer" class="grid grid-cols-3 gap-2"></div></div>
+                <textarea id="inputNote" placeholder="紀錄此刻的心情..." class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 text-sm resize-none focus:outline-none" rows="2"></textarea>
+            </div>
+            <div class="px-6 py-5 bg-rose-50/30 flex gap-3">
+                <button id="deleteBtn" class="flex-1 py-3 font-bold text-rose-400 text-sm hidden">刪除紀錄</button>
+                <button id="saveBtn" class="flex-[2] py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-black rounded-2xl shadow-lg">封印紀錄並同步！</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-rose-800 text-white px-6 py-3 rounded-full shadow-2xl transition-all duration-500 transform translate-y-20 opacity-0 z-[100] font-bold text-sm border border-rose-300">魔法啟動</div>
+
+</body>
+</html>
