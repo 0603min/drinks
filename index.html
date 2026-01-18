@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>我超愛喝手搖 - 2026 玫瑰魔法紀錄</title>
+    <title>我愛喝飲料 - 2026 </title>
+    
+    <!-- 珍珠奶茶 Favicon 圖示 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧋</text></svg>">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script type="module">
@@ -23,7 +27,6 @@
             appId: "1:131339160240:web:25431ca8429984f5cec975"
         };
 
-        // 自動判斷環境：如果在 Canvas 預覽則使用系統配置，如果在 GitHub 則使用上方配置
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
         
         const app = initializeApp(firebaseConfig);
@@ -41,17 +44,14 @@
             } catch(e) {}
             
             if (!roomId) {
-                // 產生一組 6 位數隨機房間碼
                 roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
             }
         }
         
-        // 確保儲存 ID
         try {
             localStorage.setItem('magic_room_id', roomId);
         } catch(e) {}
 
-        // 安全地嘗試更新網址列
         try {
             if (!window.location.search.includes('room=')) {
                 const url = new URL(window.location.href);
@@ -59,7 +59,7 @@
                 window.history.replaceState({}, '', url);
             }
         } catch (e) {
-            console.warn("無法在當前環境自動更新網址，同步功能仍會運作。");
+            console.warn("無法在當前環境自動更新網址。");
         }
 
         let currentUser = null;
@@ -68,8 +68,9 @@
         let selectedDate = null;
         let unsubscribe = null;
 
+        // 使用你調整後的選項
         const ICE_LEVELS = ["正常", "少冰", "微冰", "去冰", "溫"];
-        const SWEETNESS_LEVELS = ["全糖", "少糖", "半糖", "微糖", "一分糖", "無糖","無法調整"];
+        const SWEETNESS_LEVELS = ["全糖", "少糖", "半糖", "微糖", "一分糖", "無糖", "無法調整"];
 
         const $ = (id) => document.getElementById(id);
 
@@ -82,7 +83,7 @@
                         await signInAnonymously(auth);
                     }
                 } catch(err) {
-                    console.error("認證失敗，請檢查 Firebase Console 是否啟動匿名登入", err);
+                    console.error("認證失敗", err);
                 }
             };
             await initAuth();
@@ -105,7 +106,6 @@
             if (!currentUser) return;
             if (unsubscribe) unsubscribe();
 
-            // 確保路徑符合規範
             const drinksRef = collection(db, 'artifacts', appId, 'public', 'data', 'room_' + roomId);
             
             unsubscribe = onSnapshot(drinksRef, (snapshot) => {
@@ -116,7 +116,7 @@
                 renderCalendar();
                 updateStats();
             }, (error) => {
-                console.error("同步讀取失敗，請檢查 Firestore 規則是否設為測試模式", error);
+                console.error("同步讀取失敗", error);
             });
         }
 
@@ -141,14 +141,14 @@
                 dayEl.className = `h-20 sm:h-32 border border-pink-100 relative cursor-pointer hover:bg-rose-50 transition-all p-1 ${isToday ? 'bg-rose-50 ring-2 ring-pink-400 ring-inset' : 'bg-white'}`;
                 dayEl.onclick = () => openDrinkModal(dateKey);
                 
+                // --- 顯示格式更新：品項-店名 $金額 ---
                 dayEl.innerHTML = `
                     <span class="text-xs sm:text-sm font-bold ${isToday ? 'text-rose-600' : 'text-pink-400'}">${day}</span>
                     <div class="mt-1 flex flex-col gap-0.5 overflow-hidden">
                         ${drink ? `
-                            <div class="bg-gradient-to-r from-rose-400 to-pink-400 text-white text-[7px] sm:text-[10px] p-0.5 sm:p-1 rounded truncate shadow-sm">
-                                ${drink.shop}
+                            <div class="bg-gradient-to-r from-rose-400 to-pink-400 text-white text-[7px] sm:text-[9px] p-0.5 sm:p-1 rounded shadow-sm leading-tight break-all">
+                                ${drink.item}-${drink.shop} ${drink.price ? '$' + drink.price : ''}
                             </div>
-                            ${drink.price ? `<div class="text-[7px] sm:text-[8px] text-rose-400 px-1 font-bold italic">$${drink.price}</div>` : ''}
                         ` : ''}
                     </div>
                 `;
@@ -209,7 +209,7 @@
                 closeModal();
                 showToast("🪄 紀錄已封印並同步！");
             } catch (e) {
-                showToast("同步失敗，請確認 Firebase 設定。");
+                showToast("同步失敗。");
             }
         }
 
@@ -247,7 +247,7 @@
                     document.execCommand("copy");
                     showToast("📋 連結已複製！傳給手機開啟即可同步");
                 } catch(err) {
-                    showToast("複製失敗，請手動分享網址。");
+                    showToast("複製失敗。");
                 }
                 document.body.removeChild(tempInput);
             };
@@ -317,7 +317,7 @@
         <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <div class="bg-gradient-to-br from-rose-400 to-pink-500 p-1.5 rounded-full text-white shadow-md"><i data-lucide="sparkles" class="w-4 h-4"></i></div>
-                <h1 class="text-lg sm:text-xl font-black bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent truncate">我超愛喝手搖</h1>
+                <h1 class="text-lg sm:text-xl font-black bg-gradient-to-r from-rose-600 to-pink-500 bg-clip-text text-transparent truncate">我愛喝飲料</h1>
             </div>
             <div class="flex items-center gap-1 bg-pink-50 p-1 rounded-full border border-pink-100 scale-90 sm:scale-100">
                 <button id="prevMonth" class="p-2 text-rose-400"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
