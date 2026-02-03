@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>我愛喝飲料 - 2026 </title>
     
-    <!-- 珍珠奶茶 Favicon 圖示 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧋</text></svg>">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,9 +14,6 @@
         import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // ==========================================
-        // 【已填入你的 Firebase 配置】
-        // ==========================================
         const myFirebaseConfig = {
             apiKey: "AIzaSyD859fl8yhO4iBDQYhBCcJlvKNakRprlDI",
             authDomain: "drinks-e4cab.firebaseapp.com",
@@ -34,7 +30,6 @@
         const db = getFirestore(app);
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'drinks-e4cab-project';
 
-        // --- 自動同步房間邏輯 ---
         const urlParams = new URLSearchParams(window.location.search);
         let roomId = urlParams.get('room');
         
@@ -64,11 +59,11 @@
 
         let currentUser = null;
         let drinksData = {};
-        let currentViewDate = new Date(2026, 0, 1); 
+        // 【修正 1】改為抓取當前時間，不再固定在 1/1
+        let currentViewDate = new Date(); 
         let selectedDate = null;
         let unsubscribe = null;
 
-        // 使用你調整後的選項
         const ICE_LEVELS = ["正常", "少冰", "微冰", "去冰", "溫"];
         const SWEETNESS_LEVELS = ["全糖", "少糖", "半糖", "微糖", "一分糖", "無糖", "無法調整"];
 
@@ -132,16 +127,19 @@
 
             for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div class="h-20 sm:h-32 border border-pink-50 bg-pink-50/10"></div>`;
 
+            // 【修正 2】更精確的「今天」判斷邏輯
+            const todayObj = new Date();
+            const todayKey = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+
             for (let day = 1; day <= daysInMonth; day++) {
                 const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const drink = drinksData[dateKey];
-                const isToday = new Date().toLocaleDateString('zh-TW', {year:'numeric', month:'2-digit', day:'2-digit'}).replace(/\//g, '-') === dateKey;
+                const isToday = todayKey === dateKey;
                 
                 const dayEl = document.createElement("div");
                 dayEl.className = `h-20 sm:h-32 border border-pink-100 relative cursor-pointer hover:bg-rose-50 transition-all p-1 ${isToday ? 'bg-rose-50 ring-2 ring-pink-400 ring-inset' : 'bg-white'}`;
                 dayEl.onclick = () => openDrinkModal(dateKey);
                 
-                // --- 顯示格式更新：品項-店名 $金額 ---
                 dayEl.innerHTML = `
                     <span class="text-xs sm:text-sm font-bold ${isToday ? 'text-rose-600' : 'text-pink-400'}">${day}</span>
                     <div class="mt-1 flex flex-col gap-0.5 overflow-hidden">
@@ -312,7 +310,6 @@
 </head>
 <body class="min-h-screen text-gray-800 pb-24">
 
-    <!-- Header -->
     <header class="bg-white/80 backdrop-blur-md border-b border-pink-100 sticky top-0 z-30 shadow-md">
         <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -321,14 +318,13 @@
             </div>
             <div class="flex items-center gap-1 bg-pink-50 p-1 rounded-full border border-pink-100 scale-90 sm:scale-100">
                 <button id="prevMonth" class="p-2 text-rose-400"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
-                <span id="currentMonthYear" class="px-2 font-bold text-rose-700 min-w-[90px] text-center text-sm italic text-nowrap">2026年 1月</span>
+                <span id="currentMonthYear" class="px-2 font-bold text-rose-700 min-w-[90px] text-center text-sm italic text-nowrap">2026年 2月</span>
                 <button id="nextMonth" class="p-2 text-rose-400"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
             </div>
         </div>
     </header>
 
     <main class="max-w-5xl mx-auto px-4 mt-6 relative z-10">
-        <!-- 統計數據 -->
         <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-6">
             <div class="bg-white/90 p-3 sm:p-4 rounded-3xl border-2 border-pink-50 shadow-sm flex flex-col sm:flex-row items-center gap-2 sm:gap-4 magic-card text-center sm:text-left">
                 <div class="bg-rose-100 p-2 rounded-2xl text-rose-500"><i data-lucide="heart" class="w-4 h-4 sm:w-5 sm:h-5"></i></div>
@@ -344,7 +340,6 @@
             </div>
         </div>
 
-        <!-- 日曆 -->
         <div class="bg-white rounded-[2rem] border-2 sm:border-4 border-pink-50 shadow-2xl overflow-hidden backdrop-blur-sm">
             <div class="grid grid-cols-7 border-b border-pink-50">
                 <div class="calendar-header-day">日</div><div class="calendar-header-day">一</div><div class="calendar-header-day">二</div><div class="calendar-header-day">三</div><div class="calendar-header-day">四</div><div class="calendar-header-day">五</div><div class="calendar-header-day" style="color: #fbbf24;">六</div>
@@ -352,7 +347,6 @@
             <div id="calendarGrid" class="grid grid-cols-7"></div>
         </div>
 
-        <!-- 同步資訊 -->
         <div class="mt-8 p-6 bg-white/70 rounded-[2rem] border-2 border-dashed border-rose-200 text-center">
             <p class="text-xs font-bold text-rose-400 mb-2 flex items-center justify-center gap-2">
                 <i data-lucide="refresh-cw" class="w-4 h-4"></i> 魔法同步狀態：運作中
@@ -364,7 +358,6 @@
         </div>
     </main>
 
-    <!-- Modal -->
     <div id="drinkModal" class="fixed inset-0 bg-rose-900/20 backdrop-blur-md z-50 hidden items-center justify-center p-4">
         <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border-2 border-pink-100 animate-in fade-in zoom-in duration-300 overflow-hidden">
             <div class="px-6 py-5 border-b border-pink-50 flex justify-between items-center bg-rose-50/30">
