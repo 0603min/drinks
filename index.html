@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>我愛喝手搖 </title>
+    <title>我愛喝手搖 - 2026</title>
     
+    <!-- 珍珠奶茶 Favicon 圖示 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧋</text></svg>">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,6 +15,7 @@
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Firebase 配置
         const firebaseConfig = {
             apiKey: "AIzaSyD859fl8yhO4iBDQYhBCcJlvKNakRprlDI",
             authDomain: "drinks-e4cab.firebaseapp.com",
@@ -28,6 +30,7 @@
         const db = getFirestore(app);
         const appId = 'drinks-e4cab-project';
 
+        // 處理 Room ID 邏輯
         const urlParams = new URLSearchParams(window.location.search);
         let roomId = urlParams.get('room');
         if (!roomId) {
@@ -42,9 +45,9 @@
 
         let currentUser = null;
         let drinksData = {}; 
-        let currentViewDate = new Date(); 
+        let currentViewDate = new Date(); // 初始化為「今天」
         let selectedDate = null;
-        let editingIndex = null; // 用於追蹤正在編輯哪一筆 (null 代表新增)
+        let editingIndex = null; 
         let unsubscribe = null;
 
         const ICE_LEVELS = ["正常", "少冰", "微冰", "去冰", "溫"];
@@ -67,7 +70,7 @@
                 lucide.createIcons();
                 createSakura();
             } catch (err) {
-                console.error("Firebase Error:", err);
+                console.error("Init Error:", err);
             }
         }
 
@@ -77,7 +80,13 @@
             unsubscribe = onSnapshot(roomRef, (snapshot) => {
                 drinksData = {};
                 snapshot.forEach(doc => {
-                    drinksData[doc.id] = doc.data();
+                    const data = doc.data();
+                    // 核心修正：如果資料是舊格式(單一物件)，自動轉換為數組格式
+                    if (data.item && !data.list) {
+                        drinksData[doc.id] = { list: [data] };
+                    } else {
+                        drinksData[doc.id] = data;
+                    }
                 });
                 renderCalendar();
                 updateStats();
@@ -128,35 +137,33 @@
             }
         }
 
-        // 開啟當日清單視窗
         function openMainModal(dateKey) {
             selectedDate = dateKey;
-            $("modalDateTitle").innerText = `${dateKey} 的清單`;
+            $("modalDateTitle").innerText = `${dateKey} 的紀錄清單`;
             renderDrinkList();
             $("drinkListModal").classList.remove("hidden");
             $("drinkListModal").classList.add("flex");
         }
 
-        // 渲染當日的飲料清單
         function renderDrinkList() {
             const container = $("drinkListContainer");
             container.innerHTML = "";
             const list = (drinksData[selectedDate] && drinksData[selectedDate].list) || [];
             
             if (list.length === 0) {
-                container.innerHTML = `<p class="text-center text-rose-300 py-4 text-sm">今天還沒紀錄任何魔法飲料喔 🧋</p>`;
+                container.innerHTML = `<p class="text-center text-rose-300 py-4 text-sm">今日無紀錄 🧋</p>`;
             } else {
                 list.forEach((drink, index) => {
                     const item = document.createElement("div");
-                    item.className = "bg-rose-50/50 p-3 rounded-2xl border border-pink-100 flex justify-between items-center group";
+                    item.className = "bg-rose-50/50 p-3 rounded-2xl border border-pink-100 flex justify-between items-center";
                     item.innerHTML = `
                         <div class="flex-1">
                             <p class="text-sm font-bold text-rose-700">${drink.item} <span class="text-xs font-normal text-rose-400">@ ${drink.shop}</span></p>
                             <p class="text-[10px] text-rose-400">${drink.ice} / ${drink.sweetness} / $${drink.price}</p>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="event.stopPropagation(); window.editDrink(${index})" class="p-2 bg-white rounded-full text-rose-400 hover:text-rose-600 shadow-sm"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
-                            <button onclick="event.stopPropagation(); window.confirmDelete(${index})" class="p-2 bg-white rounded-full text-rose-200 hover:text-red-400 shadow-sm"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            <button onclick="event.stopPropagation(); window.editDrink(${index})" class="p-2 bg-white rounded-full text-rose-400"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                            <button onclick="event.stopPropagation(); window.confirmDelete(${index})" class="p-2 bg-white rounded-full text-rose-200"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     `;
                     container.appendChild(item);
@@ -165,7 +172,6 @@
             lucide.createIcons();
         }
 
-        // 開啟「新增/編輯」表單視窗
         window.openFormModal = function(index = null) {
             editingIndex = index;
             const list = (drinksData[selectedDate] && drinksData[selectedDate].list) || [];
@@ -207,7 +213,7 @@
             const shop = $("inputShop").value.trim();
             const item = $("inputItem").value.trim();
             const price = $("inputPrice").value;
-            if (!shop || !item) { showToast("請填寫店名與品項哦！"); return; }
+            if (!shop || !item) { showToast("請填寫店名與品項！"); return; }
             
             const ice = Array.from($("iceContainer").querySelectorAll('button')).find(b => b.classList.contains('bg-rose-500'))?.innerText;
             const sweetness = Array.from($("sweetnessContainer").querySelectorAll('button')).find(b => b.classList.contains('bg-rose-500'))?.innerText;
@@ -215,7 +221,6 @@
             const newEntry = { shop, item, price: price ? parseInt(price) : 0, ice, sweetness, note: $("inputNote").value, updatedAt: new Date().toISOString() };
             
             let currentList = (drinksData[selectedDate] && drinksData[selectedDate].list) || [];
-            
             if (editingIndex !== null) {
                 currentList[editingIndex] = newEntry;
             } else {
@@ -227,7 +232,7 @@
                 await setDoc(drinkRef, { list: currentList });
                 closeFormModal();
                 renderDrinkList();
-                showToast("🪄 魔法紀錄已儲存！");
+                showToast("🪄 已儲存！");
             } catch (e) {
                 showToast("同步失敗。");
             }
@@ -236,7 +241,6 @@
         window.confirmDelete = async (index) => {
             let currentList = (drinksData[selectedDate] && drinksData[selectedDate].list) || [];
             currentList.splice(index, 1);
-            
             try {
                 const drinkRef = doc(db, 'artifacts', appId, 'public', 'data', 'room_' + roomId, selectedDate);
                 if (currentList.length === 0) {
@@ -245,7 +249,7 @@
                     await setDoc(drinkRef, { list: currentList });
                 }
                 renderDrinkList();
-                showToast("✨ 紀錄已抹除");
+                showToast("✨ 已抹除");
             } catch (e) {
                 showToast("刪除失敗。");
             }
@@ -265,12 +269,12 @@
             $("copyLinkBtn").onclick = () => {
                 const url = new URL(window.location.href);
                 url.searchParams.set('room', roomId);
-                const tempInput = document.createElement("input");
-                document.body.appendChild(tempInput);
-                tempInput.value = url.toString();
-                tempInput.select();
+                const temp = document.createElement("input");
+                document.body.appendChild(temp);
+                temp.value = url.toString();
+                temp.select();
                 document.execCommand('copy');
-                document.body.removeChild(tempInput);
+                document.body.removeChild(temp);
                 showToast("📋 連結已複製！");
             };
         }
@@ -279,7 +283,6 @@
             let totalDrinks = 0;
             let totalSpent = 0;
             const shops = {};
-            
             Object.values(drinksData).forEach(day => {
                 if (day.list) {
                     day.list.forEach(d => {
@@ -289,11 +292,10 @@
                     });
                 }
             });
-            
             $("statTotal").innerText = totalDrinks;
             $("statTotalSpent").innerText = `$${totalSpent}`;
             const fav = Object.entries(shops).sort((a,b) => b[1] - a[1])[0];
-            $("statFavShop").innerText = fav ? fav[0] : "無資料";
+            $("statFavShop").innerText = fav ? fav[0] : "無";
         }
 
         function showToast(msg) {
@@ -321,7 +323,6 @@
         .calendar-header-day { text-align: center; padding: 0.75rem 0; font-size: 10px; font-weight: 700; color: #fda4af; text-transform: uppercase; background: rgba(255,241,242,0.5); }
         .sakura { position: fixed; top: -20px; width: 15px; height: 15px; background: #ffb7c5; border-radius: 100% 0 100% 0; opacity: 0.3; z-index: 1; pointer-events: none; animation: fall 12s linear infinite; }
         @keyframes fall { 0% { transform: translateY(0) rotate(0deg); opacity: 0; } 10% { opacity: 0.6; } 100% { transform: translateY(110vh) rotate(360deg); opacity: 0; } }
-        /* 隱藏捲軸但保持滾動功能 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
@@ -343,13 +344,13 @@
     <main class="max-w-5xl mx-auto px-4 mt-6 relative z-10">
         <div class="grid grid-cols-3 gap-2 mb-6 text-center">
             <div class="bg-white p-3 rounded-3xl border-2 border-pink-50 shadow-sm">
-                <p class="text-[8px] text-rose-300 font-bold">總杯數</p><p id="statTotal" class="text-xl font-black text-rose-600">0</p>
+                <p class="text-[8px] text-rose-300 font-bold uppercase">總杯數</p><p id="statTotal" class="text-xl font-black text-rose-600">0</p>
             </div>
             <div class="bg-white p-3 rounded-3xl border-2 border-pink-50 shadow-sm">
-                <p class="text-[8px] text-amber-400 font-bold">總支出</p><p id="statTotalSpent" class="text-xl font-black text-rose-600">$0</p>
+                <p class="text-[8px] text-amber-400 font-bold uppercase">總支出</p><p id="statTotalSpent" class="text-xl font-black text-rose-600">$0</p>
             </div>
             <div class="bg-white p-3 rounded-3xl border-2 border-pink-50 shadow-sm">
-                <p class="text-[8px] text-pink-400 font-bold">最常喝</p><p id="statFavShop" class="text-sm font-black text-rose-600 truncate px-1">無</p>
+                <p class="text-[8px] text-pink-400 font-bold uppercase">最常喝</p><p id="statFavShop" class="text-xs font-black text-rose-600 truncate px-1">無</p>
             </div>
         </div>
 
@@ -361,23 +362,21 @@
         </div>
 
         <div class="mt-8 p-6 bg-white/70 rounded-[2rem] border-2 border-dashed border-rose-200 text-center">
-            <p class="text-[10px] text-rose-300 mb-4">同步房間號：<span id="roomCode" class="font-mono bg-rose-50 px-2 py-1 rounded">---</span></p>
-            <button id="copyLinkBtn" class="bg-rose-500 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg hover:scale-105 transition-all">複製同步連結傳給手機</button>
+            <button id="copyLinkBtn" class="bg-rose-500 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg hover:scale-105 transition-all">複製同步連結</button>
+            <p class="mt-2 text-[10px] text-rose-300">房間號：<span id="roomCode" class="font-mono">---</span></p>
         </div>
     </main>
 
-    <!-- 當日清單 Modal -->
+    <!-- 清單 Modal -->
     <div id="drinkListModal" class="fixed inset-0 bg-rose-900/20 backdrop-blur-md z-40 hidden items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
             <div class="px-6 py-5 border-b border-pink-50 flex justify-between items-center bg-rose-50/30">
-                <div class="flex items-center gap-2 text-rose-800 font-black"><i data-lucide="list" class="w-5 h-5"></i><h3 id="modalDateTitle">當日清單</h3></div>
-                <button id="closeListModal" class="p-1 hover:bg-white rounded-full transition-all"><i data-lucide="x" class="text-rose-300 w-6 h-6"></i></button>
+                <div class="flex items-center gap-2 text-rose-800 font-black"><i data-lucide="list" class="w-5 h-5"></i><h3 id="modalDateTitle">紀錄</h3></div>
+                <button id="closeListModal"><i data-lucide="x" class="text-rose-300 w-6 h-6"></i></button>
             </div>
-            <div id="drinkListContainer" class="p-6 space-y-3 overflow-y-auto flex-1 no-scrollbar">
-                <!-- 清單內容會動態插入 -->
-            </div>
+            <div id="drinkListContainer" class="p-6 space-y-3 overflow-y-auto flex-1 no-scrollbar"></div>
             <div class="p-6 bg-rose-50/30">
-                <button id="addDrinkBtn" class="w-full py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 hover:scale-105 transition-all">
+                <button id="addDrinkBtn" class="w-full py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2">
                     <i data-lucide="plus" class="w-5 h-5"></i> 增加新紀錄
                 </button>
             </div>
@@ -388,21 +387,20 @@
     <div id="drinkFormModal" class="fixed inset-0 bg-rose-950/40 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
         <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in duration-200">
             <div class="flex justify-between items-center">
-                <h3 id="formModalTitle" class="font-black text-rose-800 flex items-center gap-2"><i data-lucide="wand-2" class="w-5 h-5"></i>新增紀錄</h3>
-                <button id="closeFormModal" class="p-1"><i data-lucide="x" class="text-rose-300 w-6 h-6"></i></button>
+                <h3 id="formModalTitle" class="font-black text-rose-800">魔法紀錄</h3>
+                <button id="closeFormModal"><i data-lucide="x" class="text-rose-300 w-6 h-6"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                <div class="space-y-1"><label class="text-[10px] font-bold text-rose-300 px-1">店名</label><input id="inputShop" type="text" placeholder="例如：五十嵐" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 focus:outline-none text-sm"></div>
-                <div class="space-y-1"><label class="text-[10px] font-bold text-rose-300 px-1">品項</label><input id="inputItem" type="text" placeholder="例如：可可芭蕾" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 focus:outline-none text-sm"></div>
+                <input id="inputShop" type="text" placeholder="店名" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:outline-none text-sm">
+                <input id="inputItem" type="text" placeholder="品項" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:outline-none text-sm">
             </div>
-            <div class="space-y-1"><label class="text-[10px] font-bold text-rose-300 px-1">金額</label><input id="inputPrice" type="number" placeholder="NT$" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 focus:outline-none text-sm"></div>
-            <div><p class="text-[10px] font-black text-rose-300 text-center mb-2 uppercase">冰量等級</p><div id="iceContainer" class="grid grid-cols-3 gap-2"></div></div>
-            <div><p class="text-[10px] font-black text-rose-300 text-center mb-2 uppercase">糖分魔法</p><div id="sweetnessContainer" class="grid grid-cols-4 gap-2"></div></div>
-            <textarea id="inputNote" placeholder="有什麼特別的心情嗎？" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:border-rose-200 focus:outline-none text-sm resize-none" rows="2"></textarea>
-            <button id="saveBtn" class="w-full py-4 bg-rose-500 text-white font-black rounded-2xl shadow-lg hover:bg-rose-600 transition-all">封印這筆紀錄！</button>
+            <input id="inputPrice" type="number" placeholder="金額 NT$" class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:outline-none text-sm">
+            <div><p class="text-[10px] font-black text-rose-300 text-center mb-2">冰量</p><div id="iceContainer" class="grid grid-cols-3 gap-2"></div></div>
+            <div><p class="text-[10px] font-black text-rose-300 text-center mb-2">甜度</p><div id="sweetnessContainer" class="grid grid-cols-4 gap-2"></div></div>
+            <textarea id="inputNote" placeholder="備註..." class="w-full px-4 py-3 rounded-2xl border-2 border-pink-50 focus:outline-none text-sm resize-none" rows="2"></textarea>
+            <button id="saveBtn" class="w-full py-4 bg-rose-500 text-white font-black rounded-2xl shadow-lg">封印紀錄！</button>
         </div>
     </div>
-
     <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-rose-800 text-white px-6 py-2 rounded-full shadow-2xl transition-all duration-500 transform translate-y-20 opacity-0 z-[100] text-sm font-bold"></div>
 </body>
 </html>
